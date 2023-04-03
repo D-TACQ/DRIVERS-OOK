@@ -2,6 +2,7 @@
 	path = ISL22313
 	url = https://github.com/D-TACQ/ISL22313.git
 	ignore = dirty
+	branch = main
 [submodule "emlog"]
 	path = emlog
 	url = https://github.com/D-TACQ/emlog.git
@@ -10,3 +11,4 @@
 	path = SI5326
 	url = https://github.com/D-TACQ/SI5326.git
 	ignore = dirty
+	branch = main
