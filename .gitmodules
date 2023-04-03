@@ -1,0 +1,6 @@
+[submodule "ISL22313"]
+	path = ISL22313
+	url = https://github.com/D-TACQ/ISL22313.git
+[submodule "emlog"]
+	path = emlog
+	url = https://github.com/D-TACQ/emlog.git
