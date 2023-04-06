@@ -8,3 +8,7 @@
 	url = https://github.com/D-TACQ/SI5326.git
 	ignore = dirty
 	branch = main
+[submodule "emlog"]
+	path = emlog
+	url = https://github.com/D-TACQ/emlog.git
+	branch = main
