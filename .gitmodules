@@ -12,3 +12,7 @@
 	path = emlog
 	url = https://github.com/D-TACQ/emlog.git
 	branch = main
+[submodule "mmc-mailbox-driver"]
+	path = mmc-mailbox-driver
+	url = https://github.com/D-TACQ/mmc-mailbox-driver.git
+	branch = acq400
