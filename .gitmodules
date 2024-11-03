@@ -16,3 +16,6 @@
 	path = mmc-mailbox-driver
 	url = https://github.com/D-TACQ/mmc-mailbox-driver.git
 	branch = acq400
+[submodule "AD485X"]
+	path = AD485X
+	url = https://github.com/D-TACQ/AD485X.git
