@@ -277,10 +277,6 @@ enum iio_chan_info_enum {
 */
 #define IIO_CHAN_INFO_TROUGH 29
 
-static void __mutex(void* thing) {}
-
-#define guard(mutex) __mutex
-
 /* pulled from dev_print.h */
 __printf(3, 4) int dev_err_probe(const struct device *dev, int err, const char *fmt, ...);
 __printf(3, 4) int dev_warn_probe(const struct device *dev, int err, const char *fmt, ...);
@@ -375,15 +371,18 @@ static int ads7138_write_raw(struct iio_dev *indio_dev,
 		if (bits < 0)
 			return bits;
 
-		guard(mutex)(&data->lock);
+		mutex_lock(&data->lock);
 		ret = ads7138_i2c_read(data->client, ADS7138_REG_OPMODE_CFG);
-		if (ret < 0)
+		if (ret < 0){
 			return ret;
-
-		value = ret & ~ADS7138_OPMODE_CFG_FREQ_MASK;
-		value |= FIELD_PREP(ADS7138_OPMODE_CFG_FREQ_MASK, bits);
-		return ads7138_i2c_write(data->client, ADS7138_REG_OPMODE_CFG,
-					 value);
+		}else{
+			value = ret & ~ADS7138_OPMODE_CFG_FREQ_MASK;
+			value |= FIELD_PREP(ADS7138_OPMODE_CFG_FREQ_MASK, bits);
+			ret = ads7138_i2c_write(data->client,
+					        ADS7138_REG_OPMODE_CFG, value);
+		}
+		mutex_unlock(&data->lock);
+		return ret;
 	}
 	case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
 		bits = ads7138_osr_to_bits(val);
@@ -451,16 +450,19 @@ static int ads7138_write_event(struct iio_dev *indio_dev,
 			ADS7138_REG_HIGH_TH_HYS_CH(chan->channel) :
 			ADS7138_REG_LOW_TH_CNT_CH(chan->channel);
 
-		guard(mutex)(&data->lock);
+		mutex_lock(&data->lock);
 		ret = ads7138_i2c_read(data->client, reg);
-		if (ret < 0)
+		if (ret < 0){
 			return ret;
-
-		values[0] = ret & ~ADS7138_THRESHOLD_LSB_MASK;
-		values[0] |= FIELD_PREP(ADS7138_THRESHOLD_LSB_MASK, val);
-		values[1] = (val >> 4);
-		return ads7138_i2c_write_block(data->client, reg, values,
+		}else{
+			values[0] = ret & ~ADS7138_THRESHOLD_LSB_MASK;
+			values[0] |= FIELD_PREP(ADS7138_THRESHOLD_LSB_MASK, val);
+			values[1] = (val >> 4);
+			ret = ads7138_i2c_write_block(data->client, reg, values,
 					       ARRAY_SIZE(values));
+		}
+		mutex_unlock(&data->lock);
+		return ret;
 	}
 	case IIO_EV_INFO_HYSTERESIS: {
 		if (val >= BIT(4) || val < 0)
@@ -468,14 +470,17 @@ static int ads7138_write_event(struct iio_dev *indio_dev,
 
 		reg = ADS7138_REG_HIGH_TH_HYS_CH(chan->channel);
 
-		guard(mutex)(&data->lock);
+		mutex_lock(&data->lock);
 		ret = ads7138_i2c_read(data->client, reg);
-		if (ret < 0)
+		if (ret < 0){
 			return ret;
-
-		values[0] = val & ~ADS7138_THRESHOLD_LSB_MASK;
-		values[0] |= FIELD_PREP(ADS7138_THRESHOLD_LSB_MASK, ret >> 4);
-		return ads7138_i2c_write(data->client, reg, values[0]);
+		}else{
+			values[0] = val & ~ADS7138_THRESHOLD_LSB_MASK;
+			values[0] |= FIELD_PREP(ADS7138_THRESHOLD_LSB_MASK, ret >> 4);
+			ret = ads7138_i2c_write(data->client, reg, values[0]);
+		}
+		mutex_unlock(&data->lock);
+		return ret;
 	}
 	default:
 		return -EINVAL;
@@ -741,6 +746,7 @@ static int ads7138_probe(struct i2c_client *client)
 		return ret;
 #else
 #warning PGM stubbed devm_mutex_init()
+	mutex_init(&data->lock);
 #endif	
 
 	indio_dev->name = data->chip_data->name;
