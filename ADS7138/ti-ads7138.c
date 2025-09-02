@@ -3,7 +3,8 @@
  * ADS7138 - Texas Instruments Analog-to-Digital Converter
  */
 
-
+#include <linux/stddef.h>
+#include <linux/bitops.h>
 #include <linux/bitfield.h>
 #ifdef PGMCOMOUT
 #include <linux/cleanup.h>
@@ -279,6 +280,21 @@ enum iio_chan_info_enum {
 static void __mutex(void* thing) {}
 
 #define guard(mutex) __mutex
+
+/* pulled from dev_print.h */
+__printf(3, 4) int dev_err_probe(const struct device *dev, int err, const char *fmt, ...);
+__printf(3, 4) int dev_warn_probe(const struct device *dev, int err, const char *fmt, ...);
+
+/* Simple helper for dev_err_probe() when ERR_PTR() is to be returned. */
+#define dev_err_ptr_probe(dev, ___err, fmt, ...) \
+	ERR_PTR(dev_err_probe(dev, ___err, fmt, ##__VA_ARGS__))
+
+/* Simple helper for dev_err_probe() when ERR_CAST() is to be returned. */
+#define dev_err_cast_probe(dev, ___err_ptr, fmt, ...) \
+	ERR_PTR(dev_err_probe(dev, PTR_ERR(___err_ptr), fmt, ##__VA_ARGS__))
+
+
+
 #endif
 
 static int ads7138_read_raw(struct iio_dev *indio_dev,
@@ -711,13 +727,21 @@ static int ads7138_probe(struct i2c_client *client)
 
 	data = iio_priv(indio_dev);
 	data->client = client;
+#ifdef PGMCOMOUT	
 	data->chip_data = i2c_get_match_data(client);
+#else
+#warning PGM stubbed i2c_get_match_data()
+#endif
 	if (!data->chip_data)
 		return -ENODEV;
 
+#ifdef PGMCOMOUT
 	ret = devm_mutex_init(dev, &data->lock);
 	if (ret)
 		return ret;
+#else
+#warning PGM stubbed devm_mutex_init()
+#endif	
 
 	indio_dev->name = data->chip_data->name;
 	indio_dev->modes = INDIO_DIRECT_MODE;
@@ -748,6 +772,7 @@ static int ads7138_probe(struct i2c_client *client)
 	return 0;
 }
 
+#ifdef PGMCOMOUT
 static int ads7138_runtime_suspend(struct device *dev)
 {
 	struct iio_dev *indio_dev = dev_get_drvdata(dev);
@@ -766,9 +791,10 @@ static int ads7138_runtime_resume(struct device *dev)
 
 static DEFINE_RUNTIME_DEV_PM_OPS(ads7138_pm_ops,
 				 ads7138_runtime_suspend,
-				 ads7138_runtime_resume,
-				 NULL);
-
+				 ads7138_runtime_resume, 0);
+#else
+#warning PGM PM is the devil drive a stake through it
+#endif
 static const struct ads7138_chip_data ads7128_data = {
 	.name = "ads7128",
 	.channel_num = 8,
@@ -797,10 +823,12 @@ static struct i2c_driver ads7138_driver = {
 	.driver = {
 		.name = "ads7138",
 		.of_match_table = ads7138_of_match,
+#ifdef PGMCOMOUT		
 		.pm = pm_ptr(&ads7138_pm_ops),
+#endif		
 	},
 	.id_table = ads7138_device_ids,
-	.probe = ads7138_probe,
+	.probe_new = ads7138_probe,
 };
 module_i2c_driver(ads7138_driver);
 
