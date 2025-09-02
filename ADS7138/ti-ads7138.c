@@ -3,8 +3,11 @@
  * ADS7138 - Texas Instruments Analog-to-Digital Converter
  */
 
+
 #include <linux/bitfield.h>
+#ifdef PGMCOMOUT
 #include <linux/cleanup.h>
+#endif
 #include <linux/err.h>
 #include <linux/i2c.h>
 #include <linux/init.h>
@@ -13,8 +16,9 @@
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
+#ifdef PGMCOMOUT
 #include <linux/unaligned.h>
-
+#endif
 #include <linux/iio/events.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/types.h>
@@ -105,7 +109,12 @@ static int ads7138_i2c_write_block(const struct i2c_client *client, u8 reg,
 	int ret;
 	int len = length + 2; /* "+ 2" for OPCODE and reg */
 
+#ifdef PGMCOMOUT
 	u8 *buf __free(kfree) = kmalloc(len, GFP_KERNEL);
+#else
+	u8 *buf = kmalloc(len, GFP_KERNEL);
+#endif	
+
 	if (!buf)
 		return -ENOMEM;
 
@@ -226,6 +235,51 @@ static int ads7138_osr_to_bits(int osr)
 
 	return -EINVAL;
 }
+
+#ifndef PGMCOMOUT
+#define get_unaligned_le16(v) __get_unaligned_cpu16(v)
+
+/* current iio definition for reference */
+/*
+enum iio_chan_info_enum {
+	IIO_CHAN_INFO_RAW = 0,
+	IIO_CHAN_INFO_PROCESSED,
+	IIO_CHAN_INFO_SCALE,
+	IIO_CHAN_INFO_OFFSET,
+	IIO_CHAN_INFO_CALIBSCALE,
+	IIO_CHAN_INFO_CALIBBIAS,
+	IIO_CHAN_INFO_PEAK,
+	IIO_CHAN_INFO_PEAK_SCALE,
+	IIO_CHAN_INFO_QUADRATURE_CORRECTION_RAW,
+	IIO_CHAN_INFO_AVERAGE_RAW,
+	IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY,
+	IIO_CHAN_INFO_HIGH_PASS_FILTER_3DB_FREQUENCY,
+	IIO_CHAN_INFO_SAMP_FREQ,
+	IIO_CHAN_INFO_FREQUENCY,
+	IIO_CHAN_INFO_PHASE,
+	IIO_CHAN_INFO_HARDWAREGAIN,
+	IIO_CHAN_INFO_HYSTERESIS,
+	IIO_CHAN_INFO_HYSTERESIS_RELATIVE,
+	IIO_CHAN_INFO_INT_TIME,
+	IIO_CHAN_INFO_ENABLE,
+	IIO_CHAN_INFO_CALIBHEIGHT,
+	IIO_CHAN_INFO_CALIBWEIGHT,
+	IIO_CHAN_INFO_DEBOUNCE_COUNT,
+	IIO_CHAN_INFO_DEBOUNCE_TIME,
+	IIO_CHAN_INFO_CALIBEMISSIVITY,
+	IIO_CHAN_INFO_OVERSAMPLING_RATIO,
+	IIO_CHAN_INFO_THERMOCOUPLE_TYPE,
+	IIO_CHAN_INFO_CALIBAMBIENT,
+	IIO_CHAN_INFO_ZEROPOINT,
+	IIO_CHAN_INFO_TROUGH,
+};
+*/
+#define IIO_CHAN_INFO_TROUGH 29
+
+static void __mutex(void* thing) {}
+
+#define guard(mutex) __mutex
+#endif
 
 static int ads7138_read_raw(struct iio_dev *indio_dev,
 			    struct iio_chan_spec const *chan, int *val,
@@ -433,7 +487,13 @@ static int ads7138_read_event_config(struct iio_dev *indio_dev,
 static int ads7138_write_event_config(struct iio_dev *indio_dev,
 				      const struct iio_chan_spec *chan,
 				      enum iio_event_type type,
-				      enum iio_event_direction dir, bool state)
+				      enum iio_event_direction dir, 
+#ifdef PGMCOMOUT
+				      bool state
+#else				      
+				      int state
+#endif				      
+				      )
 {
 	struct ads7138_data *data = iio_priv(indio_dev);
 
