@@ -719,6 +719,26 @@ static int ads7138_init_hw(struct ads7138_data *data)
 				   ADS7138_SEQUENCE_CFG_SEQ_MODE);
 }
 
+static const struct ads7138_chip_data ads7128_data;
+
+static int ads7138_probe_old_style(struct i2c_client *client, const struct i2c_device_id *id)
+{
+        struct device *dev = &client->dev;
+        struct iio_dev *indio_dev;
+        struct ads7138_data *data;
+        int ret;
+
+        indio_dev = devm_iio_device_alloc(dev, sizeof(*data));
+        if (!indio_dev)
+                return -ENOMEM;
+
+        data = iio_priv(indio_dev);
+        data->client = client;
+
+#warning PGM @@TODO total cheat for the chip data, 7128 only
+	data->chip_data =&ads7128_data;
+#ifdef PGMCOMOUT
+}
 static int ads7138_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
@@ -749,6 +769,7 @@ static int ads7138_probe(struct i2c_client *client)
 	mutex_init(&data->lock);
 #endif	
 
+#endif
 	indio_dev->name = data->chip_data->name;
 	indio_dev->modes = INDIO_DIRECT_MODE;
 	indio_dev->channels = ads7138_channels;
@@ -834,7 +855,7 @@ static struct i2c_driver ads7138_driver = {
 #endif		
 	},
 	.id_table = ads7138_device_ids,
-	.probe_new = ads7138_probe,
+	.probe = ads7138_probe_old_style,	
 };
 module_i2c_driver(ads7138_driver);
 
