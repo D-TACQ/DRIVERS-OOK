@@ -1,0 +1,13 @@
+#include <dt-bindings/interrupt-controller/irq.h>
+i2c {
+    #address-cells = <1>;
+    #size-cells = <0>;
+
+    adc@10 {
+        compatible = "ti,ads7138";
+        reg = <0x10>;
+        avdd-supply = <&reg_stb_3v3>;
+        interrupt-parent = <&gpio2>;
+        interrupts = <12 IRQ_TYPE_LEVEL_LOW>;
+    };
+};
