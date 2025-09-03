@@ -6,7 +6,7 @@
 
 / {
 	fragment@0 {
-		target = <&elf2>;
+		target = <&celf>;
 		__overlay__ {
     			#address-cells = <1>;
 			    #size-cells = <0>;
