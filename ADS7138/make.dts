@@ -1,0 +1,1 @@
+dtc -@ -I dts -O dtb -o octobee-ads7128.dtb octobee-ads7128.dts
