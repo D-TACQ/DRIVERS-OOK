@@ -24,6 +24,154 @@
 #include <linux/iio/iio.h>
 #include <linux/iio/types.h>
 
+#define PGM_UGLY_IIO_SYSTEM_BACKPORT 1
+#ifdef PGM_UGLY_IIO_SYSTEM_BACKPORT
+#define get_unaligned_le16(v) __get_unaligned_cpu16(v)
+
+/* current iio definition for reference */
+/*
+enum iio_chan_info_enum {
+	IIO_CHAN_INFO_RAW = 0,
+	IIO_CHAN_INFO_PROCESSED,
+	IIO_CHAN_INFO_SCALE,
+	IIO_CHAN_INFO_OFFSET,
+	IIO_CHAN_INFO_CALIBSCALE,
+	IIO_CHAN_INFO_CALIBBIAS,
+	IIO_CHAN_INFO_PEAK,
+	IIO_CHAN_INFO_PEAK_SCALE,
+	IIO_CHAN_INFO_QUADRATURE_CORRECTION_RAW,
+	IIO_CHAN_INFO_AVERAGE_RAW,
+	IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY,
+	IIO_CHAN_INFO_HIGH_PASS_FILTER_3DB_FREQUENCY,
+	IIO_CHAN_INFO_SAMP_FREQ,
+	IIO_CHAN_INFO_FREQUENCY,
+	IIO_CHAN_INFO_PHASE,
+	IIO_CHAN_INFO_HARDWAREGAIN,
+	IIO_CHAN_INFO_HYSTERESIS,
+	IIO_CHAN_INFO_HYSTERESIS_RELATIVE,
+	IIO_CHAN_INFO_INT_TIME,
+	IIO_CHAN_INFO_ENABLE,
+	IIO_CHAN_INFO_CALIBHEIGHT,
+	IIO_CHAN_INFO_CALIBWEIGHT,
+	IIO_CHAN_INFO_DEBOUNCE_COUNT,
+	IIO_CHAN_INFO_DEBOUNCE_TIME,
+	IIO_CHAN_INFO_CALIBEMISSIVITY,
+	IIO_CHAN_INFO_OVERSAMPLING_RATIO,
+	IIO_CHAN_INFO_THERMOCOUPLE_TYPE,
+	IIO_CHAN_INFO_CALIBAMBIENT,
+	IIO_CHAN_INFO_ZEROPOINT,
+	IIO_CHAN_INFO_TROUGH,
+};
+*/
+#define IIO_CHAN_INFO_TROUGH 29
+
+/* pulled from dev_print.h */
+__printf(3, 4) int dev_err_probe(const struct device *dev, int err, const char *fmt, ...);
+__printf(3, 4) int dev_warn_probe(const struct device *dev, int err, const char *fmt, ...);
+
+/* copy from drivers/base/core.c */
+
+static void __dev_probe_failed(const struct device *dev, int err, bool fatal,
+			       const char *fmt, va_list vargsp)
+{
+	struct va_format vaf;
+	va_list vargs;
+
+	/*
+	 * On x86_64 and possibly on other architectures, va_list is actually a
+	 * size-1 array containing a structure.  As a result, function parameter
+	 * vargsp decays from T[1] to T*, and &vargsp has type T** rather than
+	 * T(*)[1], which is expected by its assignment to vaf.va below.
+	 *
+	 * One standard way to solve this mess is by creating a copy in a local
+	 * variable of type va_list and then using a pointer to that local copy
+	 * instead, which is the approach employed here.
+	 */
+	va_copy(vargs, vargsp);
+
+	vaf.fmt = fmt;
+	vaf.va = &vargs;
+
+	switch (err) {
+	case -EPROBE_DEFER:
+//		device_set_deferred_probe_reason(dev, &vaf);
+		dev_dbg(dev, "error %pe: %pV", ERR_PTR(err), &vaf);
+		break;
+
+	case -ENOMEM:
+		/* Don't print anything on -ENOMEM, there's already enough output */
+		break;
+
+	default:
+		/* Log fatal final failures as errors, otherwise produce warnings */
+		if (fatal)
+			dev_err(dev, "error %pe: %pV", ERR_PTR(err), &vaf);
+		else
+			dev_warn(dev, "error %pe: %pV", ERR_PTR(err), &vaf);
+		break;
+	}
+
+	va_end(vargs);
+}
+
+/**
+ * dev_err_probe - probe error check and log helper
+ * @dev: the pointer to the struct device
+ * @err: error value to test
+ * @fmt: printf-style format string
+ * @...: arguments as specified in the format string
+ *
+ * This helper implements common pattern present in probe functions for error
+ * checking: print debug or error message depending if the error value is
+ * -EPROBE_DEFER and propagate error upwards.
+ * In case of -EPROBE_DEFER it sets also defer probe reason, which can be
+ * checked later by reading devices_deferred debugfs attribute.
+ * It replaces the following code sequence::
+ *
+ * 	if (err != -EPROBE_DEFER)
+ * 		dev_err(dev, ...);
+ * 	else
+ * 		dev_dbg(dev, ...);
+ * 	return err;
+ *
+ * with::
+ *
+ * 	return dev_err_probe(dev, err, ...);
+ *
+ * Using this helper in your probe function is totally fine even if @err
+ * is known to never be -EPROBE_DEFER.
+ * The benefit compared to a normal dev_err() is the standardized format
+ * of the error code, which is emitted symbolically (i.e. you get "EAGAIN"
+ * instead of "-35"), and having the error code returned allows more
+ * compact error paths.
+ *
+ * Returns @err.
+ */
+int dev_err_probe(const struct device *dev, int err, const char *fmt, ...)
+{
+	va_list vargs;
+
+	va_start(vargs, fmt);
+
+	/* Use dev_err() for logging when err doesn't equal -EPROBE_DEFER */
+	__dev_probe_failed(dev, err, true, fmt, vargs);
+
+	va_end(vargs);
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(dev_err_probe);
+
+
+/* Simple helper for dev_err_probe() when ERR_PTR() is to be returned. */
+#define dev_err_ptr_probe(dev, ___err, fmt, ...) \
+	ERR_PTR(dev_err_probe(dev, ___err, fmt, ##__VA_ARGS__))
+
+/* Simple helper for dev_err_probe() when ERR_CAST() is to be returned. */
+#define dev_err_cast_probe(dev, ___err_ptr, fmt, ...) \
+	ERR_PTR(dev_err_probe(dev, PTR_ERR(___err_ptr), fmt, ##__VA_ARGS__))
+
+#endif   /* PGM_UGLY_IIO_SYSTEM_BACKPORT */
 /*
  * Always assume 16 bits resolution as HW registers are aligned like that and
  * with enabled oversampling/averaging it actually corresponds to 16 bits.
@@ -237,155 +385,8 @@ static int ads7138_osr_to_bits(int osr)
 	return -EINVAL;
 }
 
-#ifndef PGMCOMOUT
-#define get_unaligned_le16(v) __get_unaligned_cpu16(v)
-
-/* current iio definition for reference */
-/*
-enum iio_chan_info_enum {
-	IIO_CHAN_INFO_RAW = 0,
-	IIO_CHAN_INFO_PROCESSED,
-	IIO_CHAN_INFO_SCALE,
-	IIO_CHAN_INFO_OFFSET,
-	IIO_CHAN_INFO_CALIBSCALE,
-	IIO_CHAN_INFO_CALIBBIAS,
-	IIO_CHAN_INFO_PEAK,
-	IIO_CHAN_INFO_PEAK_SCALE,
-	IIO_CHAN_INFO_QUADRATURE_CORRECTION_RAW,
-	IIO_CHAN_INFO_AVERAGE_RAW,
-	IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY,
-	IIO_CHAN_INFO_HIGH_PASS_FILTER_3DB_FREQUENCY,
-	IIO_CHAN_INFO_SAMP_FREQ,
-	IIO_CHAN_INFO_FREQUENCY,
-	IIO_CHAN_INFO_PHASE,
-	IIO_CHAN_INFO_HARDWAREGAIN,
-	IIO_CHAN_INFO_HYSTERESIS,
-	IIO_CHAN_INFO_HYSTERESIS_RELATIVE,
-	IIO_CHAN_INFO_INT_TIME,
-	IIO_CHAN_INFO_ENABLE,
-	IIO_CHAN_INFO_CALIBHEIGHT,
-	IIO_CHAN_INFO_CALIBWEIGHT,
-	IIO_CHAN_INFO_DEBOUNCE_COUNT,
-	IIO_CHAN_INFO_DEBOUNCE_TIME,
-	IIO_CHAN_INFO_CALIBEMISSIVITY,
-	IIO_CHAN_INFO_OVERSAMPLING_RATIO,
-	IIO_CHAN_INFO_THERMOCOUPLE_TYPE,
-	IIO_CHAN_INFO_CALIBAMBIENT,
-	IIO_CHAN_INFO_ZEROPOINT,
-	IIO_CHAN_INFO_TROUGH,
-};
-*/
-#define IIO_CHAN_INFO_TROUGH 29
-
-/* pulled from dev_print.h */
-__printf(3, 4) int dev_err_probe(const struct device *dev, int err, const char *fmt, ...);
-__printf(3, 4) int dev_warn_probe(const struct device *dev, int err, const char *fmt, ...);
-
-/* copy from drivers/base/core.c */
-
-static void __dev_probe_failed(const struct device *dev, int err, bool fatal,
-			       const char *fmt, va_list vargsp)
-{
-	struct va_format vaf;
-	va_list vargs;
-
-	/*
-	 * On x86_64 and possibly on other architectures, va_list is actually a
-	 * size-1 array containing a structure.  As a result, function parameter
-	 * vargsp decays from T[1] to T*, and &vargsp has type T** rather than
-	 * T(*)[1], which is expected by its assignment to vaf.va below.
-	 *
-	 * One standard way to solve this mess is by creating a copy in a local
-	 * variable of type va_list and then using a pointer to that local copy
-	 * instead, which is the approach employed here.
-	 */
-	va_copy(vargs, vargsp);
-
-	vaf.fmt = fmt;
-	vaf.va = &vargs;
-
-	switch (err) {
-	case -EPROBE_DEFER:
-//		device_set_deferred_probe_reason(dev, &vaf);
-		dev_dbg(dev, "error %pe: %pV", ERR_PTR(err), &vaf);
-		break;
-
-	case -ENOMEM:
-		/* Don't print anything on -ENOMEM, there's already enough output */
-		break;
-
-	default:
-		/* Log fatal final failures as errors, otherwise produce warnings */
-		if (fatal)
-			dev_err(dev, "error %pe: %pV", ERR_PTR(err), &vaf);
-		else
-			dev_warn(dev, "error %pe: %pV", ERR_PTR(err), &vaf);
-		break;
-	}
-
-	va_end(vargs);
-}
-
-/**
- * dev_err_probe - probe error check and log helper
- * @dev: the pointer to the struct device
- * @err: error value to test
- * @fmt: printf-style format string
- * @...: arguments as specified in the format string
- *
- * This helper implements common pattern present in probe functions for error
- * checking: print debug or error message depending if the error value is
- * -EPROBE_DEFER and propagate error upwards.
- * In case of -EPROBE_DEFER it sets also defer probe reason, which can be
- * checked later by reading devices_deferred debugfs attribute.
- * It replaces the following code sequence::
- *
- * 	if (err != -EPROBE_DEFER)
- * 		dev_err(dev, ...);
- * 	else
- * 		dev_dbg(dev, ...);
- * 	return err;
- *
- * with::
- *
- * 	return dev_err_probe(dev, err, ...);
- *
- * Using this helper in your probe function is totally fine even if @err
- * is known to never be -EPROBE_DEFER.
- * The benefit compared to a normal dev_err() is the standardized format
- * of the error code, which is emitted symbolically (i.e. you get "EAGAIN"
- * instead of "-35"), and having the error code returned allows more
- * compact error paths.
- *
- * Returns @err.
- */
-int dev_err_probe(const struct device *dev, int err, const char *fmt, ...)
-{
-	va_list vargs;
-
-	va_start(vargs, fmt);
-
-	/* Use dev_err() for logging when err doesn't equal -EPROBE_DEFER */
-	__dev_probe_failed(dev, err, true, fmt, vargs);
-
-	va_end(vargs);
-
-	return err;
-}
-EXPORT_SYMBOL_GPL(dev_err_probe);
 
 
-/* Simple helper for dev_err_probe() when ERR_PTR() is to be returned. */
-#define dev_err_ptr_probe(dev, ___err, fmt, ...) \
-	ERR_PTR(dev_err_probe(dev, ___err, fmt, ##__VA_ARGS__))
-
-/* Simple helper for dev_err_probe() when ERR_CAST() is to be returned. */
-#define dev_err_cast_probe(dev, ___err_ptr, fmt, ...) \
-	ERR_PTR(dev_err_probe(dev, PTR_ERR(___err_ptr), fmt, ##__VA_ARGS__))
-
-
-
-#endif
 
 static int ads7138_read_raw(struct iio_dev *indio_dev,
 			    struct iio_chan_spec const *chan, int *val,
