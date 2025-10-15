@@ -769,7 +769,6 @@ static int ads7138_init_hw(struct ads7138_data *data)
 {
 	struct device *dev = &data->client->dev;
 	int ret;
-        //dev_dbg(dev, "Probing hardware...\n");
 	data->vref_regu = devm_regulator_get(dev, "avdd");
 	if (IS_ERR(data->vref_regu))
 		return dev_err_probe(dev, PTR_ERR(data->vref_regu),
@@ -780,23 +779,23 @@ static int ads7138_init_hw(struct ads7138_data *data)
 		return dev_err_probe(dev, ret, "Failed to get avdd voltage\n");
 
 	dev_dbg(dev, "Got avdd voltage %d uV\n", ret);
-        ret = ads7138_i2c_read(data->client, 0);
+        ret = ads7138_i2c_read(data->client, 0x00);
         if (ret == 129) {
-            ads7138_i2c_write(data->client, 0, 1);
+            ads7138_i2c_write(data->client, 0x00, 0x01);
         }
         dev_dbg(dev, "status register says %d\n", ret);
-        ret = ads7138_i2c_read(data->client, 0);
+        ret = ads7138_i2c_read(data->client, 0x00);
         dev_dbg(dev, "status register says %d\n", ret);
-        int cfg_register_val = ads7138_i2c_read(data->client, 0x1);
+        int cfg_register_val = ads7138_i2c_read(data->client, 0x01);
         dev_dbg(dev, "config register says %d\n", ret);
 
-        ads7138_i2c_write(data->client, 1, 128);
+        ads7138_i2c_write(data->client, 0x01, 0x80);
 	/* Reset the chip to get a defined starting configuration */
 	dev_dbg(dev, "Attempting to reset the chip...\n");
         ret = 0;
         ret = ads7138_i2c_set_bit(data->client, ADS7138_REG_GENERAL_CFG,
 				  ADS7138_GENERAL_CFG_RST);
-        ret = ads7138_i2c_write(data->client, 1, 128);
+        ret = ads7138_i2c_write(data->client, 0x01, 0x80);
         dev_dbg(dev, "The write returned %d\n", ret);
 
         if (ret < 0) {
