@@ -14,18 +14,18 @@
 			adc@10 {
 			        compatible = "ti,ads7128";
 		        	reg = <0x10>;
-				/*
-			        avdd-supply = <&reg_stb_3v3>;
-			        interrupt-parent = <&gpio2>;
+			        avdd-supply = <&regulator_vccpint>;
+			        /*
+                                interrupt-parent = <&gpio2>;
 			        interrupts = <12 IRQ_TYPE_LEVEL_LOW>;
 				*/
 			};
 			adc@11 {
 			        compatible = "ti,ads7128";
         			reg = <0x11>;
-				/*
-			        avdd-supply = <&reg_stb_3v3>;
-			        interrupt-parent = <&gpio2>;
+			        avdd-supply = <&regulator_vccpint>;
+			        /*
+                                interrupt-parent = <&gpio2>;
 			        interrupts = <12 IRQ_TYPE_LEVEL_LOW>;
 			        */
 			};
