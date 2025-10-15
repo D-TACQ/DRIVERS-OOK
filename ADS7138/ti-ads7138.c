@@ -680,18 +680,9 @@ static const struct iio_event_spec ads7138_events[] = {
 	.type = IIO_VOLTAGE,						\
 	.indexed = 1,							\
 	.channel = _chan,						\
-	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |			\
-			      BIT(IIO_CHAN_INFO_PEAK) |			\
-			      BIT(IIO_CHAN_INFO_TROUGH),		\
-	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SAMP_FREQ) |	\
-				    BIT(IIO_CHAN_INFO_SCALE) |		\
-				    BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO), \
-	.info_mask_shared_by_type_available =				\
-				BIT(IIO_CHAN_INFO_SAMP_FREQ) |		\
-				BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO),	\
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),			\
+	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),		\
 	.datasheet_name = "AIN"#_chan,					\
-	.event_spec = ads7138_events,					\
-	.num_event_specs = ARRAY_SIZE(ads7138_events),			\
 }
 
 static const struct iio_chan_spec ads7138_channels[] = {
