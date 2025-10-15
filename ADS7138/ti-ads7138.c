@@ -15,6 +15,7 @@
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/delay.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
 #ifdef PGMCOMOUT
@@ -288,6 +289,7 @@ static int ads7138_i2c_write_with_opcode(const struct i2c_client *client,
 		dev_dbg(&client->dev, "I2C write:addr=0x%02x buf=[0x%02x, 0x%02x, 0x%02x]\n",
 		client->addr, buf[0], buf[1], buf[2]);
 	ret = i2c_master_send(client, buf, ARRAY_SIZE(buf));
+        usleep_range(20,50);
 	if (ret < 0)
                 dev_dbg(&client->dev, "I2C failed with error %d\n", ret);
 		return ret;
@@ -816,7 +818,6 @@ static int ads7138_init_hw(struct ads7138_data *data)
 	ret = ads7138_i2c_set_bit(data->client, ADS7138_REG_AUTO_SEQ_CH_SEL, 0xFF);
 	if (ret < 0)
 		return ret;
-
 	/* Set auto sequence mode and start sequencing */
 	return ads7138_i2c_set_bit(data->client, ADS7138_REG_SEQUENCE_CFG,
 				   ADS7138_SEQUENCE_CFG_SEQ_START |
