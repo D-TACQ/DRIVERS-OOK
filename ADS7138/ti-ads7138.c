@@ -15,6 +15,7 @@
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/delay.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
 #ifdef PGMCOMOUT
@@ -285,9 +286,12 @@ static int ads7138_i2c_write_with_opcode(const struct i2c_client *client,
 {
 	u8 buf[3] = { opcode, reg, regval };
 	int ret;
-
+		dev_dbg(&client->dev, "I2C write:addr=0x%02x buf=[0x%02x, 0x%02x, 0x%02x]\n",
+		client->addr, buf[0], buf[1], buf[2]);
 	ret = i2c_master_send(client, buf, ARRAY_SIZE(buf));
+        usleep_range(20,50);
 	if (ret < 0)
+                dev_dbg(&client->dev, "I2C failed with error %d\n", ret);
 		return ret;
 	if (ret != ARRAY_SIZE(buf))
 		return -EIO;
@@ -680,18 +684,9 @@ static const struct iio_event_spec ads7138_events[] = {
 	.type = IIO_VOLTAGE,						\
 	.indexed = 1,							\
 	.channel = _chan,						\
-	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |			\
-			      BIT(IIO_CHAN_INFO_PEAK) |			\
-			      BIT(IIO_CHAN_INFO_TROUGH),		\
-	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SAMP_FREQ) |	\
-				    BIT(IIO_CHAN_INFO_SCALE) |		\
-				    BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO), \
-	.info_mask_shared_by_type_available =				\
-				BIT(IIO_CHAN_INFO_SAMP_FREQ) |		\
-				BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO),	\
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),			\
+	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),		\
 	.datasheet_name = "AIN"#_chan,					\
-	.event_spec = ads7138_events,					\
-	.num_event_specs = ARRAY_SIZE(ads7138_events),			\
 }
 
 static const struct iio_chan_spec ads7138_channels[] = {
@@ -776,7 +771,6 @@ static int ads7138_init_hw(struct ads7138_data *data)
 {
 	struct device *dev = &data->client->dev;
 	int ret;
-
 	data->vref_regu = devm_regulator_get(dev, "avdd");
 	if (IS_ERR(data->vref_regu))
 		return dev_err_probe(dev, PTR_ERR(data->vref_regu),
@@ -786,28 +780,44 @@ static int ads7138_init_hw(struct ads7138_data *data)
 	if (ret < 0)
 		return dev_err_probe(dev, ret, "Failed to get avdd voltage\n");
 
+	dev_dbg(dev, "Got avdd voltage %d uV\n", ret);
+        ret = ads7138_i2c_read(data->client, 0x00);
+        if (ret == 129) {
+            ads7138_i2c_write(data->client, 0x00, 0x01);
+        }
+        dev_dbg(dev, "status register says %d\n", ret);
+        ret = ads7138_i2c_read(data->client, 0x00);
+        dev_dbg(dev, "status register says %d\n", ret);
+        int cfg_register_val = ads7138_i2c_read(data->client, 0x01);
+        dev_dbg(dev, "config register says %d\n", ret);
+
+        ads7138_i2c_write(data->client, 0x01, 0x80);
 	/* Reset the chip to get a defined starting configuration */
-	ret = ads7138_i2c_set_bit(data->client, ADS7138_REG_GENERAL_CFG,
+	dev_dbg(dev, "Attempting to reset the chip...\n");
+        ret = 0;
+        ret = ads7138_i2c_set_bit(data->client, ADS7138_REG_GENERAL_CFG,
 				  ADS7138_GENERAL_CFG_RST);
-	if (ret)
-		return ret;
+        ret = ads7138_i2c_write(data->client, 0x01, 0x80);
+        dev_dbg(dev, "The write returned %d\n", ret);
+
+        if (ret < 0) {
+            dev_dbg(dev, "Failed to reset the chip, error %d\n", ret);
+	    return ret;
+        }
 
 	ret = ads7138_set_conv_mode(data, ADS7138_MODE_AUTO);
-	if (ret)
+        if (ret < 0)
 		return ret;
-
 	/* Enable statistics and digital window comparator */
 	ret = ads7138_i2c_set_bit(data->client, ADS7138_REG_GENERAL_CFG,
 				  ADS7138_GENERAL_CFG_STATS_EN |
 				  ADS7138_GENERAL_CFG_DWC_EN);
-	if (ret)
+        if (ret < 0)
 		return ret;
-
 	/* Enable all channels for auto sequencing */
 	ret = ads7138_i2c_set_bit(data->client, ADS7138_REG_AUTO_SEQ_CH_SEL, 0xFF);
-	if (ret)
+	if (ret < 0)
 		return ret;
-
 	/* Set auto sequence mode and start sequencing */
 	return ads7138_i2c_set_bit(data->client, ADS7138_REG_SEQUENCE_CFG,
 				   ADS7138_SEQUENCE_CFG_SEQ_START |
@@ -875,11 +885,11 @@ static int ads7138_probe_old_style(struct i2c_client *client, const struct i2c_d
 	}
 
 	ret = ads7138_init_hw(data);
-	if (ret)
+	if (ret < 0)
 		return dev_err_probe(dev, ret, "Failed to initialize device\n");
 
 	ret = devm_iio_device_register(dev, indio_dev);
-	if (ret)
+	if (ret < 0)
 		return dev_err_probe(dev, ret, "Failed to register iio device\n");
 
 	return 0;
